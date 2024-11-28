@@ -2,11 +2,20 @@
 
 A nvim-lua debug adapter for use with [nvim-dap][nvim-dap].
 
-This debug adapter can only evaluate expressions within the running nvim
-process. The main (and only) goal is to have an interactive REPL to query and
-modify the running nvim process.
+Supported features:
 
-If you're looking for a way to debug Neovim plugins you should head to [osv][osv].
+- Evaluate expressions
+- Logpoints with optional conditions
+
+Other features like stopping at breakpoints, is not supported due to the
+architecture of this plugin. Both Client and debug adapter cannot run in the
+same thread if a breakpoint needs to pause execution.
+
+The main goal for this is to have an interactive REPL to query and modify the
+running nvim instance.
+
+If you're looking for a way to debug Neovim plugins which lets set breakpoints
+and inspect the state once they're hit you should head to [osv][osv].
 
 Watch the [Demo][demo].
 
