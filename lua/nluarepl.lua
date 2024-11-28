@@ -1,7 +1,57 @@
 local json = vim.json
+
+---@class nluarepl.Client
+---@field seq integer
+---@field varref integer
+---@field vars table<integer, dap.Variable[]>
+---@field hook_active boolean
+---@field breakpoints table<string, table<integer, dap.SourceBreakpoint>>
+---@field socket? uv.uv_pipe_t
 local Client = {}
 local client_mt = {__index = Client}
 local rpc = require("dap.rpc")
+
+
+---@param client nluarepl.Client
+---@param fn function
+---@param env? table
+local function setenv(client, fn, env)
+  env = env or getfenv(fn)
+  local result = {}
+
+  function result.print(...)
+    local line = table.concat({...})
+
+    ---@type dap.OutputEvent
+    local output = {
+      category = "stdout",
+      output = line .. "\n"
+    }
+    client:send_event("output", output)
+  end
+
+  setmetatable(result, {__index = env})
+  setfenv(fn, result)
+  return result
+end
+
+---@param expression string
+---@return string
+local function addreturn(expression)
+  local parser = vim.treesitter.get_string_parser(expression, "lua")
+  local trees = parser:parse()
+  local root = trees[1]:root() -- root is likely chunk
+  local child = root:child(root:child_count() - 1)
+  if child and child:type() ~= "return_statement" then
+    local slnum, scol, _, _ = child:range()
+    local lines = vim.split(expression, "\n", { plain = true })
+    local line = lines[slnum + 1]
+    lines[slnum + 1] = line:sub(1, scol) .. "return " .. line:sub(scol or 1)
+    expression = table.concat(lines, "\n")
+  end
+  return expression
+end
+
 
 function Client:handle_input(body)
   local request = json.decode(body)
@@ -84,24 +134,119 @@ end
 
 
 function Client:initialize(request)
-  self:send_response(request, {})
+  ---@type dap.Capabilities
+  local capabilities = {
+    supportsLogPoints = true
+  }
+  self:send_response(request, capabilities)
   self:send_event("initialized", {})
 end
 
 
 function Client:disconnect(request)
+  debug.sethook()
   self:send_event("terminated", {})
   self:send_response(request, {})
 end
 
 
 function Client:terminate(request)
+  debug.sethook()
   self:send_event("terminated", {})
   self:send_response(request, {})
 end
 
 function Client:launch(request)
   self:send_response(request, {})
+end
+
+
+function Client:setBreakpoints(request)
+  ---@type dap.SetBreakpointsArguments
+  local args = request.arguments
+
+  ---@type dap.Breakpoint[]
+  local result = {}
+
+  local path = args.source.path
+  if not path then
+    self:send_err_response(request, "source in setBreakpoints request requires a path")
+    return
+  end
+  self.breakpoints[path] = nil
+  for _, bp in ipairs(args.breakpoints or {}) do
+    local logMessage = bp.logMessage
+    if logMessage == nil then
+      table.insert(result, {
+        verified = false
+      })
+    else
+      table.insert(result, {
+        verified = true,
+        line = bp.line,
+      })
+      local source_bps = self.breakpoints[path]
+      if not source_bps then
+        source_bps = {}
+        self.breakpoints[path] = source_bps
+      end
+      source_bps[bp.line] = bp
+    end
+  end
+
+  if not self.hook_active and next(self.breakpoints) then
+    self.hook_active = true
+    local function hook(_, lnum)
+      local frame = 2
+      local debuginfo = debug.getinfo(frame, "Sf")
+      local source = debuginfo.source:sub(2)
+      local bps = self.breakpoints[source] or {}
+      local bp = bps[lnum]
+      if bp then
+        local env = debug.getfenv(debuginfo.func)
+        local localidx =1
+        while true do
+          local name, value = debug.getlocal(frame, localidx)
+          localidx = localidx + 1
+          if name then
+            env[name] = value or vim.NIL
+          else
+            break
+          end
+        end
+        local msg = assert(bp.logMessage)
+        if not vim.endswith(msg, "\n") then
+          msg = msg .. "\n"
+        end
+        ---@type dap.OutputEvent
+        local output = {
+          category = "console",
+          output = msg:gsub("{([%w_%.]+)}", function(match)
+            local value = env[match]
+            if value then
+              return vim.inspect(value)
+            end
+            local fn, err = loadstring(addreturn(match))
+            if fn then
+              setenv(self, fn, env)
+              value = fn()
+              return value and vim.inspect(value) or "nil"
+            else
+              return err
+            end
+          end)
+        }
+        self:send_event("output", output)
+      end
+    end
+    debug.sethook(hook, "l")
+  end
+
+  ---@type dap.SetBreakpointsResponse
+  local response = {
+    breakpoints = result
+  }
+  self:send_response(request, response)
 end
 
 
@@ -136,18 +281,7 @@ function Client:evaluate(request)
   ---@type dap.EvaluateArguments
   local args = request.arguments
 
-  local expression = args.expression
-  local parser = vim.treesitter.get_string_parser(expression, "lua")
-  local trees = parser:parse()
-  local root = trees[1]:root() -- root is likely chunk
-  local child = root:child(root:child_count() - 1)
-  if child and child:type() ~= "return_statement" then
-    local slnum, scol, _, _ = child:range()
-    local lines = vim.split(expression, "\n", { plain = true })
-    local line = lines[slnum + 1]
-    lines[slnum + 1] = line:sub(1, scol) .. "return " .. line:sub(scol or 1)
-    expression = table.concat(lines, "\n")
-  end
+  local expression = addreturn(args.expression)
   local fn, err = loadstring(expression)
   if err then
     self:send_err_response(request, tostring(err), err)
@@ -155,22 +289,7 @@ function Client:evaluate(request)
   end
   assert(fn, "loadstring must return result if there is no error")
 
-  local env = getfenv(fn)
-  local newenv = {}
-
-  function newenv.print(...)
-    local line = table.concat({...})
-
-    ---@type dap.OutputEvent
-    local output = {
-      category = "stdout",
-      output = line .. "\n"
-    }
-    self:send_event("output", output)
-  end
-
-  setmetatable(newenv, {__index = env})
-  setfenv(fn, newenv)
+  setenv(self, fn)
 
   local result = fn() or "nil"
   if type(result) == "table" then
@@ -219,11 +338,13 @@ local function nluarepl(cb)
   os.remove(pipe)
   server:bind(pipe)
 
+  ---@type nluarepl.Client
   local client = {
     seq = 0,
     varref = 0,
-    ---@type table<integer, dap.Variable[]>
-    vars = {}
+    vars = {},
+    breakpoints = {},
+    hook_active = false,
   }
   setmetatable(client, client_mt)
   server:listen(128, function(err)
@@ -239,6 +360,9 @@ local function nluarepl(cb)
       local function on_eof()
         client.vars = {}
         client.varref = 0
+        client.breakpoints = {}
+        client.hook_active = false
+        debug.sethook()
         socket:close(function()
           server:close()
         end)
