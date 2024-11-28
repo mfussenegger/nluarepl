@@ -15,7 +15,7 @@ Watch the [Demo][demo].
 - Install [nvim-dap][nvim-dap]; it's a dependency
 - Install this plugin:
 
-```
+```bash
 git clone https://github.com/mfussenegger/nluarepl.git \
     ~/.config/nvim/pack/plugins/start/nluarepl
 ```
