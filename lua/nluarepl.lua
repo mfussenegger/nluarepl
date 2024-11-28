@@ -335,9 +335,12 @@ function Client:evaluate(request)
       table.insert(variables, self:_to_variable(k, v))
     end
 
-    local varref = self.varref + 1
-    self.varref = varref
-    self.vars[varref] = variables
+    local varref = 0
+    if next(variables) then
+      varref = self.varref + 1
+      self.varref = varref
+      self.vars[varref] = variables
+    end
 
     ---@type dap.EvaluateResponse
     local response = {
