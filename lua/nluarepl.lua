@@ -53,6 +53,24 @@ local function addreturn(expression)
 end
 
 
+---@param client nluarepl.Client
+---@param expression string
+---@param env? table
+---@return any
+---@return string? error
+local function eval(client, expression, env)
+  local fn, err = loadstring(addreturn(expression))
+  if err then
+    return "nil", err
+  else
+    assert(fn)
+    setenv(client, fn, env)
+    local value = fn()
+    return value or "nil"
+  end
+end
+
+
 function Client:handle_input(body)
   local request = json.decode(body)
   local handler = self[request.command]
@@ -136,7 +154,8 @@ end
 function Client:initialize(request)
   ---@type dap.Capabilities
   local capabilities = {
-    supportsLogPoints = true
+    supportsLogPoints = true,
+    supportsConditionalBreakpoints = true,
   }
   self:send_response(request, capabilities)
   self:send_event("initialized", {})
@@ -158,6 +177,26 @@ end
 
 function Client:launch(request)
   self:send_response(request, {})
+end
+
+
+---@param client nluarepl.Client
+---@param expression string
+---@param env? table
+---@return boolean
+local function matches(client, expression, env)
+  local value, err = eval(client, expression, env)
+  if err then
+    ---@type dap.OutputEvent
+    local output = {
+      output = err,
+      category = "console"
+    }
+    client:send_event("output", output)
+    return false
+  else
+    return value == true
+  end
 end
 
 
@@ -214,6 +253,10 @@ function Client:setBreakpoints(request)
             break
           end
         end
+        local condition = bp.condition
+        if condition and not matches(self, condition, env) then
+          return
+        end
         local msg = assert(bp.logMessage)
         if not vim.endswith(msg, "\n") then
           msg = msg .. "\n"
@@ -226,14 +269,11 @@ function Client:setBreakpoints(request)
             if value then
               return vim.inspect(value)
             end
-            local fn, err = loadstring(addreturn(match))
-            if fn then
-              setenv(self, fn, env)
-              value = fn()
-              return value and vim.inspect(value) or "nil"
-            else
+            local val, err = eval(self, match, env)
+            if err then
               return err
             end
+            return vim.inspect(val)
           end)
         }
         self:send_event("output", output)
@@ -281,17 +321,13 @@ function Client:evaluate(request)
   ---@type dap.EvaluateArguments
   local args = request.arguments
 
-  local expression = addreturn(args.expression)
-  local fn, err = loadstring(expression)
+  local result, err = eval(self, args.expression)
   if err then
     self:send_err_response(request, tostring(err), err)
     return
   end
-  assert(fn, "loadstring must return result if there is no error")
+  assert(result, "loadstring must return result if there is no error")
 
-  setenv(self, fn)
-
-  local result = fn() or "nil"
   if type(result) == "table" then
     local tbl = result
     local variables = {}
