@@ -14,8 +14,8 @@ same thread if a breakpoint needs to pause execution.
 The main goal for this is to have an interactive REPL to query and modify the
 running nvim instance.
 
-If you're looking for a way to debug Neovim plugins which lets set breakpoints
-and inspect the state once they're hit you should head to [osv][osv].
+If you're looking for a way to debug Neovim plugins with full breakpoint
+support you should head to [osv][osv].
 
 Watch the [Demo][demo].
 
