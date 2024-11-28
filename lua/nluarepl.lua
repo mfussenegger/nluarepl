@@ -7,7 +7,9 @@ function Client:handle_input(body)
   local request = json.decode(body)
   local handler = self[request.command]
   if handler then
-    handler(self, request)
+    vim.schedule(function()
+      handler(self, request)
+    end)
   else
     print('no handler for ' .. request.command)
   end
