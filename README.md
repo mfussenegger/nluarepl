@@ -8,6 +8,8 @@ modify the running nvim process.
 
 If you're looking for a way to debug Neovim plugins you should head to [osv][osv].
 
+Watch the [Demo][demo].
+
 ## Installation
 
 - Install [nvim-dap][nvim-dap]; it's a dependency
@@ -28,3 +30,4 @@ included in [osv][osv], if that happens this plugin here will be archived.
 
 [osv]: https://github.com/jbyuki/one-small-step-for-vimkind
 [nvim-dap]: https://github.com/mfussenegger/nvim-dap
+[demo]: https://zignar.net/assets/files/c6144a41526e81b82d9cac39901782a4140d3f14adec3c8b8061cb1028e700ff.webm
