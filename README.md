@@ -20,8 +20,15 @@ git clone https://github.com/mfussenegger/nluarepl.git \
     ~/.config/nvim/pack/plugins/start/nluarepl
 ```
 
+## Usage
+
 The plugin automatically registers a `nluarepl` adapter for `nvim-dap` and
-creates a `nluarepl` configuration which is always available.
+creates a `nluarepl` configuration which is always available. You can start it
+using `:DapNew nluarepl` or via `dap.continue()`. Afterwards open the
+`nvim-dap` REPL using `:DapToggleRepl` and start typing expressions.
+
+For longer multi-line statements you can open a dap-eval buffer using `:sp
+dap-eval://lua` and then execute expressions via `:w` inside that buffer.
 
 ---
 
