@@ -280,6 +280,9 @@ function Client:setBreakpoints(request)
       end
     end
     debug.sethook(hook, "l")
+  elseif self.hook_active and not next(self.breakpoints) then
+    self.hook_active = false
+    debug.sethook()
   end
 
   ---@type dap.SetBreakpointsResponse
