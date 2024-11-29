@@ -292,18 +292,26 @@ end
 
 ---@param key any
 ---@param value any
+---@param parent_expression string
 ---@return dap.Variable
-function Client:_to_variable(key, value)
+function Client:_to_variable(key, value, parent_expression)
   local result = {
     name = tostring(key),
     value = tostring(value),
     type = type(value)
   }
+  local name = result.name
+  local index = string.match(result.name, '^%[?(%d+)%]?$')
+  if index then
+    result.evaluateName = parent_expression .. "[" .. index .. "]"
+  else
+    result.evaluateName = parent_expression .. "[\"" .. name .. "\"]"
+  end
   if type(value) == "table" then
     result.value = result.value .. " size=" .. vim.tbl_count(value)
     local variables = {}
     for k, v in pairs(value) do
-      table.insert(variables, self:_to_variable(k, v))
+      table.insert(variables, self:_to_variable(k, v, result.evaluateName))
     end
     local varref = self.varref + 1
     self.varref = varref
@@ -332,7 +340,7 @@ function Client:evaluate(request)
     local tbl = result
     local variables = {}
     for k, v in pairs(tbl) do
-      table.insert(variables, self:_to_variable(k, v))
+      table.insert(variables, self:_to_variable(k, v, args.expression))
     end
 
     local varref = 0
