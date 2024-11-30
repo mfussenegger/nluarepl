@@ -65,8 +65,11 @@ local function eval(client, expression, env)
   else
     assert(fn)
     setenv(client, fn, env)
-    local value = fn()
-    return value or "nil"
+    local ok, value = pcall(fn)
+    if ok then
+      return value or "nil"
+    end
+    return "nil", value
   end
 end
 
