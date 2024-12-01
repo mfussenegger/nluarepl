@@ -9,7 +9,6 @@ local json = vim.json
 ---@field socket? uv.uv_pipe_t
 local Client = {}
 local client_mt = {__index = Client}
-local rpc = require("dap.rpc")
 
 
 ---@param client nluarepl.Client
@@ -103,7 +102,7 @@ function Client:send_err_response(request, message, error)
     },
   }
   if self.socket then
-    self.socket:write(rpc.msg_with_content_length(json.encode(payload)))
+    self.socket:write(require("dap.rpc").msg_with_content_length(json.encode(payload)))
   end
 end
 
@@ -121,7 +120,7 @@ function Client:send_response(request, body)
     body = body,
   }
   if self.socket then
-    self.socket:write(rpc.msg_with_content_length(json.encode(payload)))
+    self.socket:write(require("dap.rpc").msg_with_content_length(json.encode(payload)))
   end
 end
 
@@ -136,7 +135,9 @@ function Client:send_event(event, body)
     event = event,
     body = body,
   }
-  self.socket:write(rpc.msg_with_content_length(json.encode(payload)))
+  if self.socket then
+    self.socket:write(require("dap.rpc").msg_with_content_length(json.encode(payload)))
+  end
 end
 
 
@@ -150,7 +151,9 @@ function Client:send_request(command, arguments)
     command = command,
     arguments = arguments,
   }
-  self.socket:write(rpc.msg_with_content_length(json.encode(payload)))
+  if self.socket then
+    self.socket:write(require("dap.rpc").msg_with_content_length(json.encode(payload)))
+  end
 end
 
 
