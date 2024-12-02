@@ -162,6 +162,8 @@ function Client:initialize(request)
   local capabilities = {
     supportsLogPoints = true,
     supportsConditionalBreakpoints = true,
+    supportsCompletionsRequest = true,
+    completionTriggerCharacters = {"."},
   }
   self:send_response(request, capabilities)
   self:send_event("initialized", {})
@@ -183,6 +185,55 @@ end
 
 function Client:launch(request)
   self:send_response(request, {})
+end
+
+
+---@param request dap.Request
+function Client:completions(request)
+  ---@type dap.CompletionsArguments
+  local args = request.arguments
+
+  local lines = vim.split(args.text, "\n", { plain = true })
+  local line = args.line ~= nil and lines[args.line + 1] or lines[1]
+  local prefix = line:sub(1, args.column)
+  local parts = vim.split(prefix, ".", { plain = true })
+
+  local env = getfenv(1)
+  for i, part in ipairs(parts) do
+    local e = env[part]
+    if e then
+      env = e
+    else
+      if i < #parts then
+        env = {}
+      end
+      break
+    end
+  end
+
+  ---@type dap.CompletionItem[]
+  local items = {}
+
+  for key, val in pairs(env) do
+    if vim.startswith(key, parts[#parts]) then
+      ---@type dap.CompletionItem
+      local item = {
+        label = key,
+        ["type"] = type(val) == "function" and "function" or "value"
+      }
+      table.insert(items, item)
+    end
+  end
+
+  table.sort(items, function(a, b)
+    return a.label < b.label
+  end)
+
+  ---@type dap.CompletionsResponse
+  local response = {
+    targets = items
+  }
+  self:send_response(request, response)
 end
 
 
