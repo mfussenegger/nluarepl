@@ -73,4 +73,33 @@ describe("nluarepl", function()
     local result = getcompletions("vim.sp")
     assert.are.same(expected,  result)
   end)
+
+  it("Can evaluate assignments", function()
+    local err, result
+    local session = assert(dap.session())
+    ---@type dap.EvaluateArguments
+    local params = {
+      expression = "_G.x = 10"
+    }
+    session:request("evaluate", params, function(e, r)
+      err = e
+      result = r
+    end)
+    vim.wait(1000, function() return result ~= nil end)
+    assert.is_nil(err)
+    assert.are.same({ result = "", variablesReference = 0 }, result)
+
+    err = nil
+    result = nil
+    params = {
+      expression = "_G.x"
+    }
+    session:request("evaluate", params, function(e, r)
+      err = e
+      result = r
+    end)
+    vim.wait(1000, function() return result ~= nil end)
+    assert.is_nil(err)
+    assert.are.same({ result = "10", variablesReference = 0 }, result)
+  end)
 end)
