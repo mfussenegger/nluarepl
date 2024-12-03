@@ -29,26 +29,37 @@ local function setenv(client, fn, env)
     client:send_event("output", output)
   end
 
-  setmetatable(result, {__index = env})
+  setmetatable(result, {
+    __index = env,
+    __newindex = function(_, k, v)
+      env[k] = v
+    end,
+  })
   setfenv(fn, result)
   return result
 end
 
 ---@param expression string
 ---@return string
+---@return string?
 local function addreturn(expression)
   local parser = vim.treesitter.get_string_parser(expression, "lua")
   local trees = parser:parse()
   local root = trees[1]:root() -- root is likely chunk
   local child = root:child(root:child_count() - 1)
-  if child and child:type() ~= "return_statement" then
-    local slnum, scol, _, _ = child:range()
-    local lines = vim.split(expression, "\n", { plain = true })
-    local line = lines[slnum + 1]
-    lines[slnum + 1] = line:sub(1, scol) .. "return " .. line:sub(scol or 1)
-    expression = table.concat(lines, "\n")
+  if child then
+    if child:type() == "assignment_statement" then
+      return expression, "assignment_statement"
+    end
+    if child:type() ~= "return_statement" then
+      local slnum, scol, _, _ = child:range()
+      local lines = vim.split(expression, "\n", { plain = true })
+      local line = lines[slnum + 1]
+      lines[slnum + 1] = line:sub(1, scol) .. "return " .. line:sub(scol or 1)
+      expression = table.concat(lines, "\n")
+    end
   end
-  return expression
+  return expression, (child and child:type() or nil)
 end
 
 
@@ -58,7 +69,10 @@ end
 ---@return any
 ---@return string? error
 local function eval(client, expression, env)
-  local fn, err = loadstring(addreturn(expression))
+  local expr_type
+  expression, expr_type = addreturn(expression)
+  local default_value = expr_type == "assignment_statement" and "" or "nil"
+  local fn, err = loadstring(expression)
   if err then
     return "nil", err
   else
@@ -66,7 +80,7 @@ local function eval(client, expression, env)
     setenv(client, fn, env)
     local ok, value = pcall(fn)
     if ok then
-      return value or "nil"
+      return value or default_value
     end
     return "nil", value
   end
