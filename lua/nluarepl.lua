@@ -364,33 +364,54 @@ function Client:setBreakpoints(request)
 end
 
 
+---@param name string
+---@param parent_expression string
+---@return string
+local function evalname(name, parent_expression)
+  local index = string.match(name, '^%[?(%d+)%]?$')
+  if index then
+    return parent_expression .. "[" .. index .. "]"
+  else
+    return parent_expression .. "[\"" .. name .. "\"]"
+  end
+end
+
+
 ---@param key any
 ---@param value any
 ---@param parent_expression string
+---@param seen table<any, integer>?
 ---@return dap.Variable
-function Client:_to_variable(key, value, parent_expression)
-  local result = {
-    name = tostring(key),
-    value = tostring(value),
-    type = type(value)
-  }
-  local name = result.name
-  local index = string.match(result.name, '^%[?(%d+)%]?$')
-  if index then
-    result.evaluateName = parent_expression .. "[" .. index .. "]"
-  else
-    result.evaluateName = parent_expression .. "[\"" .. name .. "\"]"
+function Client:_to_variable(key, value, parent_expression, seen)
+  if not seen then
+    seen = {}
   end
+  local name = tostring(key)
+  local result = {
+    name = name,
+    value = tostring(value),
+    type = type(value),
+    evaluateName = evalname(name, parent_expression)
+  }
   if type(value) == "table" then
     result.value = result.value .. " size=" .. vim.tbl_count(value)
-    local variables = {}
-    for k, v in pairs(value) do
-      table.insert(variables, self:_to_variable(k, v, result.evaluateName))
+    local seen_ref = seen[value]
+    if seen_ref then
+      result.variablesReference = seen_ref
+    else
+      local varref = self.varref + 1
+      self.varref = varref
+      seen[value] = varref
+
+      local variables = {}
+      self.vars[varref] = variables
+
+      for k, v in pairs(value) do
+        local var = self:_to_variable(k, v, result.evaluateName, seen)
+        table.insert(variables, var)
+      end
+      result.variablesReference = varref
     end
-    local varref = self.varref + 1
-    self.varref = varref
-    self.vars[varref] = variables
-    result.variablesReference = varref
   else
     result.variablesReference = 0
   end

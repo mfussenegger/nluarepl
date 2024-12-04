@@ -38,6 +38,25 @@ describe("nluarepl", function()
     return resp
   end
 
+  ---@param expression string
+  ---@return dap.EvaluateResponse?
+  ---@return dap.ErrorResponse?
+  local function eval(expression)
+    local session = assert(dap.session())
+    ---@type dap.EvaluateArguments
+    local args = {
+      expression = expression
+    }
+    local err
+    local resp
+    session:request("evaluate", args, function(e, r)
+      err = e
+      resp = r
+    end)
+    vim.wait(1000, function() return resp ~= nil or err ~= nil end)
+    return resp, err
+  end
+
   it("shows completions for vi", function()
     local expected = {
       {
@@ -75,31 +94,25 @@ describe("nluarepl", function()
   end)
 
   it("Can evaluate assignments", function()
-    local err, result
-    local session = assert(dap.session())
-    ---@type dap.EvaluateArguments
-    local params = {
-      expression = "_G.x = 10"
-    }
-    session:request("evaluate", params, function(e, r)
-      err = e
-      result = r
-    end)
-    vim.wait(1000, function() return result ~= nil end)
+    local result, err = eval("_G.x = 10")
     assert.is_nil(err)
     assert.are.same({ result = "", variablesReference = 0 }, result)
 
-    err = nil
-    result = nil
-    params = {
-      expression = "_G.x"
-    }
-    session:request("evaluate", params, function(e, r)
-      err = e
-      result = r
-    end)
-    vim.wait(1000, function() return result ~= nil end)
+    result, err = eval("_G.x")
     assert.is_nil(err)
     assert.are.same({ result = "10", variablesReference = 0 }, result)
+  end)
+
+  it("Can handle cyclic structures", function()
+    eval("_G.test_root = {}")
+    eval("_G.test_child = {value = 10, parent = _G.test_root}")
+    eval("_G.test_root.children = {_G.test_child}")
+    local result, err = eval("_G.test_root")
+    assert.is_nil(err)
+    assert.is_match("^table", assert(result).result)
+
+    result, err = eval("_G.test_child")
+    assert.is_nil(err)
+    assert.is_match("^table", assert(result).result)
   end)
 end)
