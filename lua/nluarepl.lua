@@ -4,6 +4,8 @@ local json = vim.json
 ---@field seq integer
 ---@field varref integer
 ---@field vars table<integer, dap.Variable[]>
+---@field locref integer
+---@field locrefs table<integer, debuginfo>
 ---@field hook_active boolean
 ---@field breakpoints table<string, table<integer, dap.SourceBreakpoint>>
 ---@field socket? uv.uv_pipe_t
@@ -386,6 +388,7 @@ function Client:_to_variable(key, value, parent_expression, seen)
   seen = seen or {}
   local name = tostring(key)
   local varref = seen[value] or 0
+  ---@type dap.Variable
   local result = {
     name = name,
     value = tostring(value),
@@ -432,6 +435,14 @@ function Client:_to_variable(key, value, parent_expression, seen)
         result.value = result.value .. " size=" .. #variables
       end
     end
+  elseif type(value) == "function" then
+    local info = debug.getinfo(value, "S")
+    if info.source:sub(1, 1) == "@" then
+      local locref = self.locref + 1
+      result.declarationLocationReference = locref
+      self.locref = locref
+      self.locrefs[locref] = info
+    end
   end
   return result
 end
@@ -451,6 +462,7 @@ function Client:evaluate(request)
 
   local variables = {}
   local result
+  local locref = nil
 
   if type(value) == "table" then
     for k, v in pairs(value) do
@@ -467,6 +479,14 @@ function Client:evaluate(request)
       end
     end
     result = tostring(value) .. " size=" .. tostring(#variables)
+  elseif type(value) == "function" then
+    result = tostring(value)
+    local info = debug.getinfo(value, "S")
+    if info.source:sub(1, 1) == "@" then
+      locref = self.locref + 1
+      self.locref = locref
+      self.locrefs[locref] = info
+    end
   else
     result = tostring(value)
   end
@@ -482,6 +502,7 @@ function Client:evaluate(request)
   local response = {
     result = result,
     variablesReference = varref,
+    valueLocationReference = locref,
   }
   self:send_response(request, response)
 end
@@ -495,6 +516,26 @@ function Client:variables(request)
   self:send_response(request, {
     variables = variables or {}
   })
+end
+
+
+---@param request dap.Request
+function Client:locations(request)
+  ---@type dap.LocationsArguments
+  local args = request.arguments
+  local info = self.locrefs[args.locationReference]
+  if info then
+    ---@type dap.LocationsResponse
+    local response = {
+      line = info.linedefined,
+      source = {
+        path = info.source:sub(2)
+      }
+    }
+    self:send_response(request, response)
+  else
+    self:send_err_response(request, "location not found")
+  end
 end
 
 
@@ -512,6 +553,8 @@ local function nluarepl(cb)
     vars = {},
     breakpoints = {},
     hook_active = false,
+    locref = 0,
+    locrefs = {},
   }
   setmetatable(client, client_mt)
   server:listen(128, function(err)
@@ -529,6 +572,8 @@ local function nluarepl(cb)
         client.varref = 0
         client.breakpoints = {}
         client.hook_active = false
+        client.locrefs = {}
+        client.locref = 0
         debug.sethook()
         socket:close(function()
           server:close()
