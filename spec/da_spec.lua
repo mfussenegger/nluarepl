@@ -155,7 +155,6 @@ return tree[1]
     vars_result, err = vars(result.variablesReference)
     assert.is_nil(err)
     assert(vars_result)
-    assert.are.same(4, #vars_result.variables)
     local names = vim.tbl_map(function(v) return v.name end, vars_result.variables)
     table.sort(names)
     assert.are.same({"copy", "edit", "included_ranges", "root"}, names)
