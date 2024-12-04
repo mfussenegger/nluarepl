@@ -383,37 +383,55 @@ end
 ---@param seen table<any, integer>?
 ---@return dap.Variable
 function Client:_to_variable(key, value, parent_expression, seen)
-  if not seen then
-    seen = {}
-  end
+  seen = seen or {}
   local name = tostring(key)
+  local varref = seen[value] or 0
   local result = {
     name = name,
     value = tostring(value),
     type = type(value),
-    evaluateName = evalname(name, parent_expression)
+    evaluateName = evalname(name, parent_expression),
+    variablesReference = varref
   }
+  if varref > 0 then
+    result.variablesReference = varref
+    return result
+  end
+
+  local function nextref()
+    varref = self.varref + 1
+    self.varref = varref
+    seen[value] = varref
+    local variables = {}
+    self.vars[varref] = variables
+    return varref, variables
+  end
+
+  local variables
   if type(value) == "table" then
-    result.value = result.value .. " size=" .. vim.tbl_count(value)
-    local seen_ref = seen[value]
-    if seen_ref then
-      result.variablesReference = seen_ref
-    else
-      local varref = self.varref + 1
-      self.varref = varref
-      seen[value] = varref
-
-      local variables = {}
-      self.vars[varref] = variables
-
+    local count = vim.tbl_count(value)
+    result.value = result.value .. " size=" .. count
+    if count > 0 then
+      result.variablesReference, variables = nextref()
       for k, v in pairs(value) do
         local var = self:_to_variable(k, v, result.evaluateName, seen)
         table.insert(variables, var)
       end
-      result.variablesReference = varref
     end
-  else
-    result.variablesReference = 0
+  elseif type(value) == "userdata" then
+    local mt = getmetatable(value)
+    if mt then
+      local count = vim.tbl_count(mt)
+      if count > 0 then
+        result.variablesReference, variables = nextref()
+        for k, v in pairs(mt) do
+          if k:sub(1, #"__") ~= "__" then
+            table.insert(variables, self:_to_variable(k, v, result.evaluateName, seen))
+          end
+        end
+        result.value = result.value .. " size=" .. #variables
+      end
+    end
   end
   return result
 end
@@ -424,41 +442,48 @@ function Client:evaluate(request)
   ---@type dap.EvaluateArguments
   local args = request.arguments
 
-  local result, err = eval(self, args.expression)
+  local value, err = eval(self, args.expression)
   if err then
     self:send_err_response(request, tostring(err), err)
     return
   end
-  assert(result, "loadstring must return result if there is no error")
+  assert(value, "loadstring must return result if there is no error")
 
-  if type(result) == "table" then
-    local tbl = result
-    local variables = {}
-    for k, v in pairs(tbl) do
+  local variables = {}
+  local result
+
+  if type(value) == "table" then
+    for k, v in pairs(value) do
       table.insert(variables, self:_to_variable(k, v, args.expression))
     end
-
-    local varref = 0
-    if next(variables) then
-      varref = self.varref + 1
-      self.varref = varref
-      self.vars[varref] = variables
+    result = tostring(value) .. " size=" .. tostring(vim.tbl_count(value))
+  elseif type(value) == "userdata" then
+    local mt = getmetatable(value)
+    if mt then
+      for k, v in pairs(mt) do
+        if k:sub(1, #"__") ~= "__" then
+          table.insert(variables, self:_to_variable(k, v, args.expression))
+        end
+      end
     end
-
-    ---@type dap.EvaluateResponse
-    local response = {
-      result = tostring(tbl) .. " size=" .. tostring(vim.tbl_count(tbl)),
-      variablesReference = varref,
-    }
-    self:send_response(request, response)
+    result = tostring(value) .. " size=" .. tostring(#variables)
   else
-    ---@type dap.EvaluateResponse
-    local response = {
-      result = tostring(result),
-      variablesReference = 0,
-    }
-    self:send_response(request, response)
+    result = tostring(value)
   end
+
+  local varref = 0
+  if next(variables) then
+    varref = self.varref + 1
+    self.varref = varref
+    self.vars[varref] = variables
+  end
+
+  ---@type dap.EvaluateResponse
+  local response = {
+    result = result,
+    variablesReference = varref,
+  }
+  self:send_response(request, response)
 end
 
 

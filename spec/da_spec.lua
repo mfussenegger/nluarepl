@@ -38,6 +38,25 @@ describe("nluarepl", function()
     return resp
   end
 
+  ---@param ref integer
+  ---@return dap.VariableResponse?
+  ---@return dap.ErrorResponse?
+  local function vars(ref)
+    local session = assert(dap.session())
+    ---@type dap.VariablesArguments
+    local args = {
+      variablesReference = ref
+    }
+    local err
+    local resp
+    session:request("variables", args, function(e, r)
+      err = e
+      resp = r
+    end)
+    vim.wait(1000, function() return resp ~= nil or err ~= nil end)
+    return resp, err
+  end
+
   ---@param expression string
   ---@return dap.EvaluateResponse?
   ---@return dap.ErrorResponse?
@@ -114,5 +133,27 @@ describe("nluarepl", function()
     result, err = eval("_G.test_child")
     assert.is_nil(err)
     assert.is_match("^table", assert(result).result)
+  end)
+
+  it("shows metatable info on userdata values", function()
+    local bufnr = vim.api.nvim_get_current_buf()
+    local expression = [[
+local parser = vim.treesitter.get_parser(%d, 'lua')
+local tree = parser:parse()
+return tree[1]
+]]
+    local result, err = eval(string.format(expression, bufnr))
+    assert.is_nil(err)
+    assert(result)
+    assert.are.same("<tree> size=4", result.result)
+
+    local vars_result
+    vars_result, err = vars(result.variablesReference)
+    assert.is_nil(err)
+    assert(vars_result)
+    assert.are.same(4, #vars_result.variables)
+    local names = vim.tbl_map(function(v) return v.name end, vars_result.variables)
+    table.sort(names)
+    assert.are.same({"copy", "edit", "included_ranges", "root"}, names)
   end)
 end)
