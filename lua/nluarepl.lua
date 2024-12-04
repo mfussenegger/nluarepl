@@ -1,9 +1,13 @@
 local json = vim.json
 
+---@class nluarepl.Var
+---@field evalname string
+---@field value any?
+
 ---@class nluarepl.Client
 ---@field seq integer
 ---@field varref integer
----@field vars table<integer, dap.Variable[]>
+---@field vars table<integer, nluarepl.Var>
 ---@field locref integer
 ---@field locrefs table<integer, debuginfo>
 ---@field hook_active boolean
@@ -382,12 +386,10 @@ end
 ---@param key any
 ---@param value any
 ---@param parent_expression string
----@param seen table<any, integer>?
 ---@return dap.Variable
-function Client:_to_variable(key, value, parent_expression, seen)
-  seen = seen or {}
+function Client:_to_variable(key, value, parent_expression)
   local name = tostring(key)
-  local varref = seen[value] or 0
+  local varref = 0
   ---@type dap.Variable
   local result = {
     name = name,
@@ -404,35 +406,31 @@ function Client:_to_variable(key, value, parent_expression, seen)
   local function nextref()
     varref = self.varref + 1
     self.varref = varref
-    seen[value] = varref
-    local variables = {}
-    self.vars[varref] = variables
-    return varref, variables
+    self.vars[varref] = {
+      evalname = result.evaluateName,
+      value = value,
+    }
+    return varref
   end
 
-  local variables
   if type(value) == "table" then
     local count = vim.tbl_count(value)
     result.value = result.value .. " size=" .. count
     if count > 0 then
-      result.variablesReference, variables = nextref()
-      for k, v in pairs(value) do
-        local var = self:_to_variable(k, v, result.evaluateName, seen)
-        table.insert(variables, var)
-      end
+      result.variablesReference = nextref()
     end
   elseif type(value) == "userdata" then
     local mt = getmetatable(value)
     if mt then
-      local count = vim.tbl_count(mt)
-      if count > 0 then
-        result.variablesReference, variables = nextref()
-        for k, v in pairs(mt) do
-          if k:sub(1, #"__") ~= "__" then
-            table.insert(variables, self:_to_variable(k, v, result.evaluateName, seen))
-          end
+      local num_vars = 0
+      for k, _ in pairs(mt) do
+        if k:sub(1, #"__") ~= "__" then
+          num_vars = num_vars + 1
         end
-        result.value = result.value .. " size=" .. #variables
+      end
+      result.value = result.value .. " size=" .. num_vars
+      if num_vars > 0 then
+        result.variablesReference = nextref()
       end
     end
   elseif type(value) == "function" then
@@ -460,25 +458,39 @@ function Client:evaluate(request)
   end
   assert(value, "loadstring must return result if there is no error")
 
-  local variables = {}
-  local result
   local locref = nil
+  local varref = 0
 
+  local function nextref()
+    local ref = self.varref + 1
+    self.varref = ref
+    self.vars[ref] = {
+      evalname = args.expression,
+      value = value
+    }
+    return ref
+  end
+
+  local result
   if type(value) == "table" then
-    for k, v in pairs(value) do
-      table.insert(variables, self:_to_variable(k, v, args.expression))
+    if next(value) then
+      varref = nextref()
     end
     result = tostring(value) .. " size=" .. tostring(vim.tbl_count(value))
   elseif type(value) == "userdata" then
     local mt = getmetatable(value)
+    local num_vars = 0
     if mt then
-      for k, v in pairs(mt) do
+      for k, _ in pairs(mt) do
         if k:sub(1, #"__") ~= "__" then
-          table.insert(variables, self:_to_variable(k, v, args.expression))
+          num_vars = num_vars + 1
         end
       end
     end
-    result = tostring(value) .. " size=" .. tostring(#variables)
+    result = tostring(value) .. " size=" .. tostring(num_vars)
+    if num_vars > 0 then
+      varref = nextref()
+    end
   elseif type(value) == "function" then
     result = tostring(value)
     local info = debug.getinfo(value, "S")
@@ -489,13 +501,6 @@ function Client:evaluate(request)
     end
   else
     result = tostring(value)
-  end
-
-  local varref = 0
-  if next(variables) then
-    varref = self.varref + 1
-    self.varref = varref
-    self.vars[varref] = variables
   end
 
   ---@type dap.EvaluateResponse
@@ -512,9 +517,29 @@ end
 function Client:variables(request)
   ---@type dap.VariablesArguments
   local args = request.arguments
-  local variables = self.vars[args.variablesReference]
+  local entry = self.vars[args.variablesReference]
+  if not entry then
+    self:send_err_response(request, "No variable found for reference: " .. args.variablesReference)
+    return
+  end
+  local value = entry.value
+  local parent = entry.evalname
+  local variables = {}
+  if type(value) == "table" then
+    for k, v in pairs(value) do
+      table.insert(variables, self:_to_variable(k, v, parent))
+    end
+  elseif type(value) == "userdata" then
+    local mt = getmetatable(value)
+    assert(mt, "Shouldn't have variablesReference for userdata if there is no metatable")
+    for k, v in pairs(mt) do
+      if k:sub(1, #"__") ~= "__" then
+        table.insert(variables, self:_to_variable(k, v, parent))
+      end
+    end
+  end
   self:send_response(request, {
-    variables = variables or {}
+    variables = variables
   })
 end
 
