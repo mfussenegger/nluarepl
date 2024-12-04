@@ -383,41 +383,40 @@ local function evalname(name, parent_expression)
 end
 
 
+---@param value any
+---@param parentexpr string
+---@return integer
+function Client:_nextref(value, parentexpr)
+  local ref = self.varref + 1
+  self.varref = ref
+  self.vars[ref] = {
+    value = value,
+    evalname = parentexpr,
+  }
+  return ref
+end
+
+
 ---@param key any
 ---@param value any
 ---@param parent_expression string
 ---@return dap.Variable
 function Client:_to_variable(key, value, parent_expression)
   local name = tostring(key)
-  local varref = 0
   ---@type dap.Variable
   local result = {
     name = name,
     value = tostring(value),
     type = type(value),
     evaluateName = evalname(name, parent_expression),
-    variablesReference = varref
+    variablesReference = 0
   }
-  if varref > 0 then
-    result.variablesReference = varref
-    return result
-  end
-
-  local function nextref()
-    varref = self.varref + 1
-    self.varref = varref
-    self.vars[varref] = {
-      evalname = result.evaluateName,
-      value = value,
-    }
-    return varref
-  end
 
   if type(value) == "table" then
     local count = vim.tbl_count(value)
     result.value = result.value .. " size=" .. count
     if count > 0 then
-      result.variablesReference = nextref()
+      result.variablesReference = self:_nextref(value, result.evaluateName)
     end
   elseif type(value) == "userdata" then
     local mt = getmetatable(value)
@@ -430,7 +429,7 @@ function Client:_to_variable(key, value, parent_expression)
       end
       result.value = result.value .. " size=" .. num_vars
       if num_vars > 0 then
-        result.variablesReference = nextref()
+        result.variablesReference = self:_nextref(value, result.evaluateName)
       end
     end
   elseif type(value) == "function" then
@@ -461,20 +460,10 @@ function Client:evaluate(request)
   local locref = nil
   local varref = 0
 
-  local function nextref()
-    local ref = self.varref + 1
-    self.varref = ref
-    self.vars[ref] = {
-      evalname = args.expression,
-      value = value
-    }
-    return ref
-  end
-
   local result
   if type(value) == "table" then
     if next(value) then
-      varref = nextref()
+      varref = self:_nextref(value, args.expression)
     end
     result = tostring(value) .. " size=" .. tostring(vim.tbl_count(value))
   elseif type(value) == "userdata" then
@@ -489,7 +478,7 @@ function Client:evaluate(request)
     end
     result = tostring(value) .. " size=" .. tostring(num_vars)
     if num_vars > 0 then
-      varref = nextref()
+      varref = self:_nextref(value, args.expression)
     end
   elseif type(value) == "function" then
     result = tostring(value)
