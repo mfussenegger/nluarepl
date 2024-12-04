@@ -21,59 +21,63 @@ describe("nluarepl", function()
     end)
   end)
 
-  ---@param text string
-  ---@return dap.CompletionsResponse
-  local function getcompletions(text)
+  ---@param method string
+  ---@param args any
+  local function request(method, args)
     local session = assert(dap.session())
+    local err
+    local resp
+    session:request(method, args, function(e, r)
+      err = e
+      resp = r
+    end)
+    vim.wait(1000, function() return resp ~= nil or err ~= nil end)
+    return resp, err
+  end
+
+  ---@param text string
+  ---@return dap.CompletionsResponse?
+  ---@return dap.ErrorResponse?
+  local function getcompletions(text)
     ---@type dap.CompletionsArguments
     local args = {
       text = text,
       column = #text
     }
-    local resp
-    session:request("completions", args, function(_, r)
-      resp = r
-    end)
-    vim.wait(1000, function() return resp ~= nil end)
-    return resp
+    return request("completions", args)
   end
 
   ---@param ref integer
   ---@return dap.VariableResponse?
   ---@return dap.ErrorResponse?
   local function vars(ref)
-    local session = assert(dap.session())
     ---@type dap.VariablesArguments
     local args = {
       variablesReference = ref
     }
-    local err
-    local resp
-    session:request("variables", args, function(e, r)
-      err = e
-      resp = r
-    end)
-    vim.wait(1000, function() return resp ~= nil or err ~= nil end)
-    return resp, err
+    return request("variables", args)
+  end
+
+  ---@param loc integer
+  ---@return dap.LocationsResponse?
+  ---@return dap.ErrorResponse?
+  local function getlocations(loc)
+    ---@type dap.LocationsArguments
+    local args = {
+      locationReference = loc
+    }
+    return request("locations", args)
   end
 
   ---@param expression string
   ---@return dap.EvaluateResponse?
   ---@return dap.ErrorResponse?
   local function eval(expression)
-    local session = assert(dap.session())
     ---@type dap.EvaluateArguments
     local args = {
       expression = expression
     }
-    local err
-    local resp
-    session:request("evaluate", args, function(e, r)
-      err = e
-      resp = r
-    end)
-    vim.wait(1000, function() return resp ~= nil or err ~= nil end)
-    return resp, err
+    return request("evaluate", args)
   end
 
   it("shows completions for vi", function()
@@ -155,5 +159,27 @@ return tree[1]
     local names = vim.tbl_map(function(v) return v.name end, vars_result.variables)
     table.sort(names)
     assert.are.same({"copy", "edit", "included_ranges", "root"}, names)
+  end)
+
+  it("provides location ref for functions", function()
+    local result, err = eval("vim.lsp.get_clients")
+    assert.is_nil(err)
+    local expected = {
+      result = tostring(vim.lsp.get_clients),
+      valueLocationReference = 1,
+      variablesReference = 0
+    }
+    assert.are.same(expected, result)
+
+    local locations, err2 = getlocations(1)
+    assert.is_nil(err2)
+    local info = debug.getinfo(vim.lsp.get_clients, "S")
+    expected = {
+      line = info.linedefined,
+      source = {
+        path = info.source:sub(2)
+      }
+    }
+    assert.are.same(expected, locations)
   end)
 end)
