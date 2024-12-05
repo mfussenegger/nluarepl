@@ -397,26 +397,20 @@ function Client:_nextref(value, parentexpr)
 end
 
 
----@param key any
 ---@param value any
----@param parent_expression string
----@return dap.Variable
-function Client:_to_variable(key, value, parent_expression)
-  local name = tostring(key)
-  ---@type dap.Variable
-  local result = {
-    name = name,
-    value = tostring(value),
-    type = type(value),
-    evaluateName = evalname(name, parent_expression),
-    variablesReference = 0
-  }
-
+---@param parentexpr string
+---@return string valuestr
+---@return integer varref
+---@return integer? location
+function Client:_valueresult(value, parentexpr)
+  local valuestr = tostring(value)
+  local varref = 0
+  local location = nil
   if type(value) == "table" then
     local count = vim.tbl_count(value)
-    result.value = result.value .. " size=" .. count
+    valuestr = valuestr .. " size=" .. count
     if count > 0 then
-      result.variablesReference = self:_nextref(value, result.evaluateName)
+      varref = self:_nextref(value, parentexpr)
     end
   elseif type(value) == "userdata" then
     local mt = getmetatable(value)
@@ -427,20 +421,55 @@ function Client:_to_variable(key, value, parent_expression)
           num_vars = num_vars + 1
         end
       end
-      result.value = result.value .. " size=" .. num_vars
+      valuestr = valuestr .. " size=" .. num_vars
       if num_vars > 0 then
-        result.variablesReference = self:_nextref(value, result.evaluateName)
+        varref = self:_nextref(value, parentexpr)
       end
     end
   elseif type(value) == "function" then
     local info = debug.getinfo(value, "S")
     if info.source:sub(1, 1) == "@" then
       local locref = self.locref + 1
-      result.declarationLocationReference = locref
+      location = locref
       self.locref = locref
       self.locrefs[locref] = info
     end
+    local idx = 1
+    local num_upvals = 0
+    while true do
+      local upname = debug.getupvalue(value, idx)
+      if upname then
+        idx = idx + 1
+        num_upvals = num_upvals + 1
+      else
+        break
+      end
+    end
+    if num_upvals > 0 then
+      varref = self:_nextref(value, parentexpr)
+    end
   end
+  return valuestr, varref, location
+end
+
+
+---@param key any
+---@param value any
+---@param parentexpr string
+---@return dap.Variable
+function Client:_to_variable(key, value, parentexpr)
+  local name = tostring(key)
+  local new_parentexpr = evalname(name, parentexpr)
+  local valuestr, varref, location = self:_valueresult(value, new_parentexpr)
+  ---@type dap.Variable
+  local result = {
+    name = name,
+    value = valuestr,
+    type = type(value),
+    evaluateName = new_parentexpr,
+    variablesReference = varref,
+    declarationLocationReference = location
+  }
   return result
 end
 
@@ -457,44 +486,11 @@ function Client:evaluate(request)
   end
   assert(value, "loadstring must return result if there is no error")
 
-  local locref = nil
-  local varref = 0
-
-  local result
-  if type(value) == "table" then
-    if next(value) then
-      varref = self:_nextref(value, args.expression)
-    end
-    result = tostring(value) .. " size=" .. tostring(vim.tbl_count(value))
-  elseif type(value) == "userdata" then
-    local mt = getmetatable(value)
-    local num_vars = 0
-    if mt then
-      for k, _ in pairs(mt) do
-        if k:sub(1, #"__") ~= "__" then
-          num_vars = num_vars + 1
-        end
-      end
-    end
-    result = tostring(value) .. " size=" .. tostring(num_vars)
-    if num_vars > 0 then
-      varref = self:_nextref(value, args.expression)
-    end
-  elseif type(value) == "function" then
-    result = tostring(value)
-    local info = debug.getinfo(value, "S")
-    if info.source:sub(1, 1) == "@" then
-      locref = self.locref + 1
-      self.locref = locref
-      self.locrefs[locref] = info
-    end
-  else
-    result = tostring(value)
-  end
+  local valuestr, varref, locref = self:_valueresult(value, args.expression)
 
   ---@type dap.EvaluateResponse
   local response = {
-    result = result,
+    result = valuestr,
     variablesReference = varref,
     valueLocationReference = locref,
   }
@@ -524,6 +520,17 @@ function Client:variables(request)
     for k, v in pairs(mt) do
       if k:sub(1, #"__") ~= "__" then
         table.insert(variables, self:_to_variable(k, v, parent))
+      end
+    end
+  elseif type(value) == "function" then
+    local idx = 1
+    while true do
+      local upname, upvalue = debug.getupvalue(value, idx)
+      if upname then
+        table.insert(variables, self:_to_variable(upname, upvalue, parent))
+        idx = idx + 1
+      else
+        break
       end
     end
   end

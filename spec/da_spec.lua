@@ -166,7 +166,7 @@ return tree[1]
     local expected = {
       result = tostring(vim.lsp.get_clients),
       valueLocationReference = 1,
-      variablesReference = 0
+      variablesReference = 1
     }
     assert.are.same(expected, result)
 
