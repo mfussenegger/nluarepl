@@ -101,7 +101,7 @@ function Client:handle_input(body)
       handler(self, request)
     end)
   else
-    print('no handler for ' .. request.command)
+    self:send_err_response(request, "No handler for " .. request.command)
   end
 end
 
