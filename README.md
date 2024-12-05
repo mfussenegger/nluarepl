@@ -39,6 +39,13 @@ using `:DapNew nluarepl` or via `dap.continue()`. Afterwards open the
 For longer multi-line statements you can open a dap-eval buffer using `:sp
 dap-eval://lua` and then execute expressions via `:w` inside that buffer.
 
+
+## Limitations
+
+- Logpoints won't work for functions baked into nvim. This includes functions
+  like `vim.split` or other functions defined in [shared.lua][shared.lua]
+  nluarepl also can't provide source locations for these functions.
+
 ---
 
 Disclaimer: There's a chance the functionality of this plugin could get
@@ -47,3 +54,4 @@ included in [osv][osv], if that happens this plugin here will be archived.
 [osv]: https://github.com/jbyuki/one-small-step-for-vimkind
 [nvim-dap]: https://github.com/mfussenegger/nvim-dap
 [demo]: https://zignar.net/assets/files/c6144a41526e81b82d9cac39901782a4140d3f14adec3c8b8061cb1028e700ff.webm
+[shared.lua]: https://github.com/neovim/neovim/blob/master/runtime/lua/vim/shared.lua
