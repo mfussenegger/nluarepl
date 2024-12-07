@@ -116,6 +116,21 @@ describe("nluarepl", function()
     assert.are.same(expected,  result)
   end)
 
+  it("Can handle completing vim.fn", function()
+    local result = getcompletions("vim.fn.")
+    assert(result)
+    local labels = vim.iter(result.targets)
+      :map(function(x) return x.label end)
+      :take(3)
+      :totable()
+    local expected = {
+      "executable",
+      "has",
+      "mkdir",
+    }
+    assert.are.same(expected, labels)
+  end)
+
   it("Can evaluate assignments", function()
     local result, err = eval("_G.x = 10")
     assert.is_nil(err)

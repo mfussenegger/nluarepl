@@ -220,8 +220,11 @@ function Client:completions(request)
 
   local env = getfenv(1)
   for i, part in ipairs(parts) do
+    if part == "" then
+      break
+    end
     local e = env[part]
-    if e then
+    if type(e) == "table" then
       env = e
     else
       if i < #parts then
