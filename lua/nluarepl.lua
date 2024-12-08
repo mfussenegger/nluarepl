@@ -410,10 +410,11 @@ function Client:_valueresult(value, parentexpr)
   local varref = 0
   local location = nil
   local num_children = 0
-  if type(value) == "table" then
+  local type_ = type(value)
+  if type_ == "table" then
     num_children = vim.tbl_count(value)
     valuestr = valuestr .. " size=" .. num_children
-  elseif type(value) == "function" then
+  elseif type_ == "function" then
     local info = debug.getinfo(value, "Su")
     if info.source:sub(1, 1) == "@" then
       local locref = self.locref + 1
@@ -423,9 +424,11 @@ function Client:_valueresult(value, parentexpr)
     end
     num_children = num_children + info.nups
   end
-  local mt = getmetatable(value)
-  if mt and value ~= "" then
-    num_children = num_children + 1
+  if type_ ~= "string" then
+    local mt = getmetatable(value)
+    if mt then
+      num_children = num_children + 1
+    end
   end
   if num_children > 0 then
     varref = self:_nextref(value, parentexpr)
