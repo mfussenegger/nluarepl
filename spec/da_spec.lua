@@ -164,15 +164,22 @@ return tree[1]
     local result, err = eval(string.format(expression, bufnr))
     assert.is_nil(err)
     assert(result)
-    assert.are.same("<tree> size=4", result.result)
+    assert.are.same("<tree>", result.result)
 
     local vars_result
     vars_result, err = vars(result.variablesReference)
     assert.is_nil(err)
     assert(vars_result)
     local names = vim.tbl_map(function(v) return v.name end, vars_result.variables)
+    assert.are.same({"[[metatable]]"}, names)
+
+    local mt = vars_result.variables[1]
+    vars_result, err = vars(mt.variablesReference)
+    assert.is_nil(err)
+    assert(vars_result)
+    names = vim.tbl_map(function(v) return v.name end, vars_result.variables)
     table.sort(names)
-    assert.are.same({"copy", "edit", "included_ranges", "root"}, names)
+    assert.are.same({"__gc", "__index", "__tostring", "copy", "edit", "included_ranges", "root"}, names)
   end)
 
   it("provides location ref for functions", function()

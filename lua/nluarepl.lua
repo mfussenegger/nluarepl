@@ -409,26 +409,10 @@ function Client:_valueresult(value, parentexpr)
   local valuestr = tostring(value)
   local varref = 0
   local location = nil
+  local num_children = 0
   if type(value) == "table" then
-    local count = vim.tbl_count(value)
-    valuestr = valuestr .. " size=" .. count
-    if count > 0 then
-      varref = self:_nextref(value, parentexpr)
-    end
-  elseif type(value) == "userdata" then
-    local mt = getmetatable(value)
-    if mt then
-      local num_vars = 0
-      for k, _ in pairs(mt) do
-        if k:sub(1, #"__") ~= "__" then
-          num_vars = num_vars + 1
-        end
-      end
-      valuestr = valuestr .. " size=" .. num_vars
-      if num_vars > 0 then
-        varref = self:_nextref(value, parentexpr)
-      end
-    end
+    num_children = vim.tbl_count(value)
+    valuestr = valuestr .. " size=" .. num_children
   elseif type(value) == "function" then
     local info = debug.getinfo(value, "S")
     if info.source:sub(1, 1) == "@" then
@@ -438,19 +422,22 @@ function Client:_valueresult(value, parentexpr)
       self.locrefs[locref] = info
     end
     local idx = 1
-    local num_upvals = 0
     while true do
       local upname = debug.getupvalue(value, idx)
       if upname then
         idx = idx + 1
-        num_upvals = num_upvals + 1
+        num_children = num_children + 1
       else
         break
       end
     end
-    if num_upvals > 0 then
-      varref = self:_nextref(value, parentexpr)
-    end
+  end
+  local mt = getmetatable(value)
+  if mt and value ~= "" then
+    num_children = num_children + 1
+  end
+  if num_children > 0 then
+    varref = self:_nextref(value, parentexpr)
   end
   return valuestr, varref, location
 end
@@ -517,14 +504,6 @@ function Client:variables(request)
     for k, v in pairs(value) do
       table.insert(variables, self:_to_variable(k, v, parent))
     end
-  elseif type(value) == "userdata" then
-    local mt = getmetatable(value)
-    assert(mt, "Shouldn't have variablesReference for userdata if there is no metatable")
-    for k, v in pairs(mt) do
-      if k:sub(1, #"__") ~= "__" then
-        table.insert(variables, self:_to_variable(k, v, parent))
-      end
-    end
   elseif type(value) == "function" then
     local idx = 1
     while true do
@@ -536,6 +515,20 @@ function Client:variables(request)
         break
       end
     end
+  end
+  local mt = getmetatable(value)
+  if mt then
+    local mt_eval = "getmetatable(" .. parent .. ")"
+    local ref = self:_nextref(mt, mt_eval)
+
+    ---@type dap.Variable
+    local var = {
+      name = "[[metatable]]",
+      value = tostring(mt) .. " size=" .. vim.tbl_count(mt),
+      evaluateName = mt_eval,
+      variablesReference = ref
+    }
+    table.insert(variables, var)
   end
   self:send_response(request, {
     variables = variables
