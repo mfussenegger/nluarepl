@@ -414,23 +414,14 @@ function Client:_valueresult(value, parentexpr)
     num_children = vim.tbl_count(value)
     valuestr = valuestr .. " size=" .. num_children
   elseif type(value) == "function" then
-    local info = debug.getinfo(value, "S")
+    local info = debug.getinfo(value, "Su")
     if info.source:sub(1, 1) == "@" then
       local locref = self.locref + 1
       location = locref
       self.locref = locref
       self.locrefs[locref] = info
     end
-    local idx = 1
-    while true do
-      local upname = debug.getupvalue(value, idx)
-      if upname then
-        idx = idx + 1
-        num_children = num_children + 1
-      else
-        break
-      end
-    end
+    num_children = num_children + info.nups
   end
   local mt = getmetatable(value)
   if mt and value ~= "" then
@@ -509,6 +500,9 @@ function Client:variables(request)
     while true do
       local upname, upvalue = debug.getupvalue(value, idx)
       if upname then
+        if upname == "" then
+          upname = "<upval:" .. idx .. ">"
+        end
         table.insert(variables, self:_to_variable(upname, upvalue, parent))
         idx = idx + 1
       else
