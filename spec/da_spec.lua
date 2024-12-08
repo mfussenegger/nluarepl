@@ -50,7 +50,7 @@ describe("nluarepl", function()
   ---@param ref integer
   ---@return dap.VariableResponse?
   ---@return dap.ErrorResponse?
-  local function vars(ref)
+  local function getvars(ref)
     ---@type dap.VariablesArguments
     local args = {
       variablesReference = ref
@@ -167,14 +167,14 @@ return tree[1]
     assert.are.same("<tree>", result.result)
 
     local vars_result
-    vars_result, err = vars(result.variablesReference)
+    vars_result, err = getvars(result.variablesReference)
     assert.is_nil(err)
     assert(vars_result)
     local names = vim.tbl_map(function(v) return v.name end, vars_result.variables)
     assert.are.same({"[[metatable]]"}, names)
 
     local mt = vars_result.variables[1]
-    vars_result, err = vars(mt.variablesReference)
+    vars_result, err = getvars(mt.variablesReference)
     assert.is_nil(err)
     assert(vars_result)
     names = vim.tbl_map(function(v) return v.name end, vars_result.variables)
@@ -202,5 +202,25 @@ return tree[1]
       }
     }
     assert.are.same(expected, locations)
+  end)
+
+  it("can handle special luajit metatable", function()
+    local result, err = eval([[require("string.buffer").new()]])
+    assert.is_nil(err)
+    local expected = {
+      result = "",
+      variablesReference = 1
+    }
+    assert.are.same(expected, result)
+    local vars, verr = getvars(1)
+    assert.is_nil(verr)
+    assert(vars)
+    local expected_var = {
+      evaluateName = [[getmetatable(require("string.buffer").new())]],
+      name = "[[metatable]]",
+      value = "buffer",
+      variablesReference = 2
+    }
+    assert.are.same(expected_var, vars.variables[1])
   end)
 end)

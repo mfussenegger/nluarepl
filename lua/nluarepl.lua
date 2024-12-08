@@ -517,11 +517,15 @@ function Client:variables(request)
   if mt then
     local mt_eval = "getmetatable(" .. parent .. ")"
     local ref = self:_nextref(mt, mt_eval)
+    local value_text = tostring(mt)
+    if type(mt) == "table" then
+      value_text = value_text .. " size=" .. vim.tbl_count(mt)
+    end
 
     ---@type dap.Variable
     local var = {
       name = "[[metatable]]",
-      value = tostring(mt) .. " size=" .. vim.tbl_count(mt),
+      value = value_text,
       evaluateName = mt_eval,
       variablesReference = ref
     }
