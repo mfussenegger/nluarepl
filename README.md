@@ -4,8 +4,8 @@ A nvim-lua debug adapter for use with [nvim-dap][nvim-dap].
 
 Supported features:
 
-- Evaluate expressions
-- Logpoints with optional conditions
+- Evaluate expressions ([Watch demo][eval-demo])
+- Logpoints with optional conditions ([Watch demo][logpoint-demo])
 
 Other features like stopping at breakpoints, is not supported due to the
 architecture of this plugin. Both Client and debug adapter cannot run in the
@@ -17,7 +17,6 @@ running nvim instance.
 If you're looking for a way to debug Neovim plugins with full breakpoint
 support you should head to [osv][osv].
 
-Watch the [Demo][demo].
 
 ## Installation
 
@@ -53,5 +52,6 @@ included in [osv][osv], if that happens this plugin here will be archived.
 
 [osv]: https://github.com/jbyuki/one-small-step-for-vimkind
 [nvim-dap]: https://github.com/mfussenegger/nvim-dap
-[demo]: https://zignar.net/assets/files/c6144a41526e81b82d9cac39901782a4140d3f14adec3c8b8061cb1028e700ff.webm
+[eval-demo]: https://zignar.net/assets/files/c6144a41526e81b82d9cac39901782a4140d3f14adec3c8b8061cb1028e700ff.webm
 [shared.lua]: https://github.com/neovim/neovim/blob/master/runtime/lua/vim/shared.lua
+[logpoint-demo]: https://private-user-images.githubusercontent.com/38700/390889660-26060bf8-09f5-4ed4-bd8f-3837f8015990.webm?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3MzQxNzc2MTgsIm5iZiI6MTczNDE3NzMxOCwicGF0aCI6Ii8zODcwMC8zOTA4ODk2NjAtMjYwNjBiZjgtMDlmNS00ZWQ0LWJkOGYtMzgzN2Y4MDE1OTkwLndlYm0_WC1BbXotQWxnb3JpdGhtPUFXUzQtSE1BQy1TSEEyNTYmWC1BbXotQ3JlZGVudGlhbD1BS0lBVkNPRFlMU0E1M1BRSzRaQSUyRjIwMjQxMjE0JTJGdXMtZWFzdC0xJTJGczMlMkZhd3M0X3JlcXVlc3QmWC1BbXotRGF0ZT0yMDI0MTIxNFQxMTU1MThaJlgtQW16LUV4cGlyZXM9MzAwJlgtQW16LVNpZ25hdHVyZT1jMjJhOTg0NjI3MTVlMDEzNDhmZmMzY2JlODUxYTljZTU5M2VkOWQ2NzI3OWE1OGU4NDE3OTQyOTY1MTE3ODQ4JlgtQW16LVNpZ25lZEhlYWRlcnM9aG9zdCJ9.hb9jh3Xx2yC4VrqyjpWXY1r9pStET8jElOCNI2WEtv8
