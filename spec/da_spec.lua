@@ -223,4 +223,18 @@ return tree[1]
     }
     assert.are.same(expected_var, vars.variables[1])
   end)
+
+  it("can print table values", function()
+    local output = nil
+    dap.defaults.fallback.on_output = function(_, out)
+      output = out
+    end
+    local result, err = eval("print({x=10})")
+    assert.is_nil(err)
+    assert(result)
+    assert.are.same("nil", result.result)
+    assert(output)
+    assert.are.same("stdout", output.category)
+    assert.are.same(vim.inspect({x = 10}) .. "\n", output.output)
+  end)
 end)
