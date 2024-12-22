@@ -235,6 +235,23 @@ return tree[1]
     assert.are.same("nil", result.result)
     assert(output)
     assert.are.same("stdout", output.category)
-    assert.are.same(vim.inspect({x = 10}) .. "\n", output.output)
+    assert.is.matches("table: .*", output.output)
+  end)
+
+  it("can print nil values", function()
+    local output = nil
+    dap.defaults.fallback.on_output = function(_, out)
+      output = out
+    end
+    local result, err = eval("print(20, nil, y)")
+    assert.is_nil(err)
+    assert(result)
+    assert.are.same("nil", result.result)
+    assert(output)
+    assert.are.same("stdout", output.category)
+    assert.are.same("20	nil	nil\n", output.output)
+
+    eval("print(20, nil, 3)")
+    assert.are.same("20	nil	3\n", output.output)
   end)
 end)

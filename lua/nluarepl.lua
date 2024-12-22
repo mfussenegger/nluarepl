@@ -25,11 +25,13 @@ local function setenv(client, fn, env)
   local result = {}
 
   function result.print(...)
-    local args = {...}
-    for i, arg in ipairs(args) do
-      args[i] = vim.inspect(arg)
+    local args = {}
+    local argc = select("#", ...)
+    for i = 1, argc do
+      local arg = select(i, ...)
+      args[i] = tostring(arg or "nil")
     end
-    local line = table.concat(args)
+    local line = table.concat(args, "\t")
 
     ---@type dap.OutputEvent
     local output = {
