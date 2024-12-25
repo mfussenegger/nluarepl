@@ -45,6 +45,11 @@ dap-eval://lua` and then execute expressions via `:w` inside that buffer.
   like `vim.split` or other functions defined in [shared.lua][shared.lua]
   nluarepl also can't provide source locations for these functions.
 
+  You can start nvim with `--luamod-dev` to avoid this limitation, but be
+  careful setting logpoints on these functions, some of them are called a lot -
+  and many by nvim-dap/nluarepl - that can result in output spam and a
+  significant slowdown of nvim.
+
 ---
 
 Disclaimer: There's a chance the functionality of this plugin could get
