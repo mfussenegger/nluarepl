@@ -57,6 +57,9 @@ end
 local function addreturn(expression)
   local parser = vim.treesitter.get_string_parser(expression, "lua")
   local trees = parser:parse()
+  if not trees then
+    return expression, nil
+  end
   local root = trees[1]:root() -- root is likely chunk
   local child = root:child(root:child_count() - 1)
   if child then
@@ -570,7 +573,7 @@ local function nluarepl(cb)
   os.remove(pipe)
   server:bind(pipe)
 
-  ---@type nluarepl.Client
+  ---@class nluarepl.Client
   local client = {
     seq = 0,
     varref = 0,
